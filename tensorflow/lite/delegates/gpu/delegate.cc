@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/lite/delegates/gpu/delegate.h"
+#include "tensorflow/lite/delegates/gpu/delegate_core.h"
 
 #include <cstdint>
 #include <memory>
@@ -63,7 +64,7 @@ InferenceUsage ToUsage(int32_t usage) {
 // Forward declarations.
 TfLiteStatus DelegatePrepare(TfLiteContext* context, TfLiteDelegate* delegate);
 
-class Delegate {
+class Delegate: public DelegateCore {
  public:
   explicit Delegate(const TfLiteGpuDelegateOptionsV2* options) {
     options_ = options ? *options : TfLiteGpuDelegateOptionsV2Default();
@@ -148,7 +149,18 @@ class Delegate {
     return runner_->Run();
   }
 
+  void SetExternalObjectDef(int index, ObjectDef object_def) {
+    external_object_defs_[index] = object_def;
+  }
+
+  void SetExternalTensorObject(int index, TensorObject tensor_object) {
+    external_tensor_objects_[index] = tensor_object;
+  }
+
   ObjectDef GetObjectDef(int index) const {
+    if (external_object_defs_.count(index) > 0) {
+      return external_object_defs_.at(index);
+    }
     ObjectDef default_object_def;
     default_object_def.data_type = DataType::FLOAT32;
     default_object_def.data_layout = DataLayout::BHWC;
@@ -158,6 +170,9 @@ class Delegate {
   }
 
   TensorObject GetTensorObject(int index, TfLiteContext* context) const {
+    if (external_tensor_objects_.count(index) > 0) {
+      return external_tensor_objects_.at(index);
+    }
     auto& tensor = context->tensors[index];
     return MakeCpuMemory(absl::MakeSpan(tensor.data.raw, tensor.bytes));
   }
@@ -230,6 +245,8 @@ class Delegate {
   std::unique_ptr<InferenceRunner> runner_;
   std::vector<int64_t> input_indices_;
   std::vector<int64_t> output_indices_;
+  std::map<int64_t, ObjectDef> external_object_defs_;
+  std::map<int64_t, TensorObject> external_tensor_objects_;
 };
 
 inline Delegate* GetDelegate(TfLiteNode* node) {
