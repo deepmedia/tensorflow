@@ -222,7 +222,7 @@ cc_library(
 cc_library(
     name = "delegate",
     srcs = ["delegate.cc"],
-    hdrs = ["delegate.h"],
+    hdrs = ["delegate.h", "delegate_core.h"],
     linkopts = select({
         "//tensorflow:android": [
             "-lEGL",

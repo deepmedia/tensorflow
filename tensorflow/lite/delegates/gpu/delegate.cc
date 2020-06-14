@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/lite/delegates/gpu/delegate.h"
+#include "tensorflow/lite/delegates/gpu/delegate_core.h"
 
 #include <cstdint>
 #include <memory>
@@ -69,7 +70,7 @@ InferenceUsage ToUsage(int32_t usage) {
 // Forward declarations.
 TfLiteStatus DelegatePrepare(TfLiteContext* context, TfLiteDelegate* delegate);
 
-class Delegate {
+class Delegate: public DelegateCore {
  public:
   explicit Delegate(const TfLiteGpuDelegateOptionsV2* options)
       : num_delegate_kernels_(0) {
@@ -91,6 +92,14 @@ class Delegate {
   }
   int num_delegate_kernels() const { return num_delegate_kernels_; }
 
+  void SetExternalObjectDef(int index, ObjectDef object_def) {
+    external_object_defs_[index] = object_def;
+  }
+
+  void SetExternalTensorObject(int index, TensorObject tensor_object) {
+    external_tensor_objects_[index] = tensor_object;
+  }
+
  private:
   TfLiteDelegate delegate_ = {
       .data_ = reinterpret_cast<void*>(this),
@@ -103,6 +112,9 @@ class Delegate {
 
   TfLiteGpuDelegateOptionsV2 options_;
   int num_delegate_kernels_ = 0;
+
+  std::map<int64_t, ObjectDef> external_object_defs_;
+  std::map<int64_t, TensorObject> external_tensor_objects_;
 
   friend class DelegateKernel;
 };
@@ -237,6 +249,9 @@ class DelegateKernel {
   }
 
   ObjectDef GetObjectDef(int index) const {
+    if (delegate_->external_object_defs_.count(index) > 0) {
+      return delegate_->external_object_defs_.at(index);
+    }
     ObjectDef default_object_def;
     default_object_def.data_type = DataType::FLOAT32;
     default_object_def.data_layout = DataLayout::BHWC;
@@ -246,6 +261,9 @@ class DelegateKernel {
   }
 
   TensorObject GetTensorObject(int index, TfLiteContext* context) const {
+    if (delegate_->external_tensor_objects_.count(index) > 0) {
+      return delegate_->external_tensor_objects_.at(index);
+    }
     auto& tensor = context->tensors[index];
     return MakeCpuMemory(absl::MakeSpan(tensor.data.raw, tensor.bytes));
   }
